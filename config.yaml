@@ -1,0 +1,29 @@
+# Plex Audio Audit — Stage 1 configuration.
+#
+# Paths below are the IN-CONTAINER paths. Mount your host media into these
+# locations when running:
+#   docker run --rm \
+#     -v /Volumes/Plex/Movies:/media/movies:ro \
+#     -v /Volumes/Plex/TV:/media/tv:ro \
+#     -v $(pwd)/reports:/reports \
+#     -v $(pwd)/config.yaml:/app/config.yaml:ro \
+#     plex-audio-audit
+
+library_roots:
+  - name: Movies
+    path: /media/movies
+  - name: TV
+    path: /media/tv
+
+scan_extensions:
+  - .mkv
+  - .mp4
+  - .m4v
+
+reports_dir: /reports
+
+# Classification rules — tweak without touching audit.py.
+classification:
+  target_language: eng
+  ok_codecs:     [aac, ac3, eac3, dts]
+  encode_codecs: [truehd, dts-hd, flac, mlp, opus]
