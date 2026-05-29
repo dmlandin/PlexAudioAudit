@@ -120,6 +120,8 @@ def classify(tracks: list[AudioTrack], rules: dict) -> tuple[str, str]:
             if any(t.codec in ok_codecs for t in default_eng):
                 return CLASS_OK, ""
             codec = default_eng[0].codec or "unknown"
+            if any(t.codec in ok_codecs for t in tagged_eng):
+                return CLASS_REFLAG, f"default_eng_codec_{codec}_ok_sibling_exists"
             if any(t.codec in encode_codecs for t in default_eng):
                 return CLASS_ENCODE, f"default_eng_codec_{codec}"
             return CLASS_ENCODE, f"default_eng_codec_unsupported_{codec}"
