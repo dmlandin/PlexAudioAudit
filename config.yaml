@@ -25,5 +25,5 @@ reports_dir: /reports
 # Classification rules — tweak without touching audit.py.
 classification:
   target_language: eng
-  ok_codecs:     [aac, ac3, eac3, dts]
-  encode_codecs: [truehd, dts-hd, flac, mlp, opus]
+  ok_codecs:     [aac, ac3, eac3, dts, opus]
+  encode_codecs: [truehd, dts-hd, flac, mlp]
