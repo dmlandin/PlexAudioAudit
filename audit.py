@@ -112,6 +112,9 @@ def classify(tracks: list[AudioTrack], rules: dict) -> tuple[str, str]:
     ]
 
     if not tagged_eng and not title_eng:
+        default_tracks = [t for t in tracks if t.default]
+        if any(t.codec in ok_codecs for t in default_tracks):
+            return CLASS_OK, "default_compatible_track_unknown_lang"
         if len(tracks) == 1 and tracks[0].codec in ok_codecs:
             return CLASS_OK, "single_compatible_track_unknown_lang"
         return CLASS_ENCODE, "no_english_track"
