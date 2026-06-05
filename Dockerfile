@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir pyyaml==6.0.2
 
 WORKDIR /app
 COPY audit.py /app/audit.py
+COPY remediate.py /app/remediate.py
 COPY config.yaml /app/config.yaml
 
 ENTRYPOINT ["python", "/app/audit.py"]

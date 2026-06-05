@@ -1,9 +1,15 @@
 # plex-audio-audit
 
-Stage 1 of a Plex library audio audit tool. **Read-only** — walks your media
-libraries, inspects each video file's audio tracks via `ffprobe`, classifies
-what (if any) action each file will need at Stage 2, and writes a per-library
-summary plus a CSV worklist. No media files are modified.
+A two-stage Plex library audio tool.
+
+**Stage 1 (`audit.py`)** is **read-only** — it walks your media libraries,
+inspects each video file's audio tracks via `ffprobe`, classifies what (if any)
+action each file needs, and writes a per-library summary plus a CSV worklist. No
+media files are modified.
+
+**Stage 2 (`remediate.py`)** acts on that worklist, fixing the fixable files with
+metadata-only `mkvpropedit` edits (no re-encoding). See
+[Stage 2 — reflag remediation](#stage-2--reflag-remediation) below.
 
 ## What Stage 1 does
 
@@ -72,7 +78,77 @@ track-index order, so a single row covers every audio track in the file.
 `reports/summary.txt` — per-library counts by classification plus a grand
 total. The same summary is also printed to stdout at the end of the run.
 
+## Stage 2 — reflag remediation
+
+`remediate.py` is the **write** stage. It reads the Stage 1 `worklist.csv`,
+re-probes each `REFLAG`/`ENCODE` candidate, and — when a compatible audio track
+already exists in the file — promotes it to the **default** track with a
+metadata-only `mkvpropedit` edit. When the promoted track has no language tag
+(or `und`), it also stamps `eng` so Plex labels it correctly. **No audio is ever
+re-encoded.**
+
+Because `ENCODE` from Stage 1 includes files that actually *do* have a compatible
+track that simply isn't tagged English (e.g. TrueHD default + an untagged AC3
+5.1), Stage 2 re-evaluates those too and reflags them when possible. Files that
+genuinely have **no compatible audio track at all** can't be reflagged — they are
+**deferred** (listed in the summary) for a future Stage 3 re-encode, or left for
+the media server to transcode on the fly.
+
+Reflagging is in-place, fast, and reversible (re-run to change the default back).
+
+| Candidate (from Stage 1) | Stage 2 action |
+|--------------------------|----------------|
+| `REFLAG` | Promote the compatible English track to default; stamp `eng` if untagged. |
+| `ENCODE` with an untagged-but-compatible track | Same — promote it (`reflag`). |
+| `ENCODE` with no compatible track anywhere | `defer-no-compatible-track` (Stage 3). |
+| Non-`.mkv` | `skip-not-mkv` — `mkvpropedit` can't edit MP4 headers. |
+
+### Run
+
+Stage 2 is **dry-run by default** — it prints the planned `mkvpropedit` actions
+and changes nothing. Pass `--apply` to actually modify files.
+
+Unlike Stage 1, Stage 2 **writes** to your media, so mount the libraries
+**read-write** (omit the `:ro` suffix). The image already ships `mkvtoolnix`;
+override the entrypoint to run `remediate.py`:
+
+```sh
+# Dry run first — review reports/remediation.csv before applying.
+docker run --rm \
+  -v /Volumes/Plex/Movies:/media/movies \
+  -v /Volumes/Plex/TV:/media/television \
+  -v $(pwd)/reports:/reports \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  --entrypoint python plex-audio-audit \
+  /app/remediate.py --config /app/config.yaml
+
+# Apply once you're satisfied (note: libraries mounted read-write, no :ro).
+docker run --rm \
+  -v /Volumes/Plex/Movies:/media/movies \
+  -v /Volumes/Plex/TV:/media/television \
+  -v $(pwd)/reports:/reports \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  --entrypoint python plex-audio-audit \
+  /app/remediate.py --config /app/config.yaml --apply
+```
+
+Useful flags: `--worklist PATH` (default `<reports_dir>/worklist.csv`),
+`--library NAME` (only remediate one library), `--no-language-fix` (flip the
+default flag but don't stamp `eng` on untagged tracks).
+
+### Stage 2 outputs
+
+`reports/remediation.csv` — one row per candidate: `library`, `relative_path`,
+`action`, `reason`, `old_default`, `new_default`, `language_stamped`, `verify`,
+`error`, and the exact `command` that was (or would be) run. After `--apply`,
+each reflagged file is re-probed and `verify` records `ok` or the mismatch.
+
+`reports/remediation_summary.txt` — counts by action plus an explicit **deferred
+list** of files that still need attention (no compatible track / not an MKV), so
+nothing is silently dropped. Printed to stdout at the end of the run.
+
 ## What's next
 
-Stage 2 (remux to fix `REFLAG` files and re-encode `ENCODE` files) is **not
-implemented yet** — review the Stage 1 output against your library first.
+Stage 3 (re-encode the `defer-no-compatible-track` files to a direct-play codec)
+is **not implemented yet**. Those files are reported by Stage 2; for now you can
+let the media server transcode them on the fly, or handle them manually.
